@@ -43,3 +43,11 @@ def test_run_instructions_missing_md_file(capsys, tmp_path):
             assert exc_info.value.code == 1
             captured = capsys.readouterr()
             assert "Instructions file not found" in captured.err
+
+
+def test_help_instructions_mentions_integrate_command(capsys):
+    run_instructions("help")
+    captured = capsys.readouterr()
+    assert "mempalace integrate" in captured.out
+    assert "mempalace integrate --dry-run" in captured.out
+    assert "mempalace integrate remove" in captured.out

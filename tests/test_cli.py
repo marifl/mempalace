@@ -309,6 +309,90 @@ def test_main_mine_dispatches():
         mock_cmd.assert_called_once()
 
 
+def test_main_integrate_dispatches():
+    with (
+        patch("sys.argv", ["mempalace", "integrate"]),
+        patch("mempalace.cli.cmd_integrate") as mock_cmd,
+    ):
+        main()
+        mock_cmd.assert_called_once()
+
+
+def test_main_integrate_remove_dispatches():
+    with (
+        patch("sys.argv", ["mempalace", "integrate", "remove"]),
+        patch("mempalace.cli.cmd_integrate_remove") as mock_cmd,
+    ):
+        main()
+        mock_cmd.assert_called_once()
+
+
+def test_main_integrate_passes_manager_flags():
+    with (
+        patch(
+            "sys.argv",
+            [
+                "mempalace",
+                "--palace",
+                "~/palaces/work",
+                "integrate",
+                "claude",
+                "codex",
+                "--dry-run",
+                "--scope",
+                "user",
+            ],
+        ),
+        patch("mempalace.integrations.manager.run_integrations", return_value=0) as mock_run,
+    ):
+        main()
+        mock_run.assert_called_once_with(
+            hosts=["claude", "codex"],
+            dry_run=True,
+            write=False,
+            palace="~/palaces/work",
+            scope="user",
+            remove=False,
+        )
+
+
+def test_main_integrate_remove_passes_manager_flags():
+    with (
+        patch(
+            "sys.argv",
+            [
+                "mempalace",
+                "integrate",
+                "remove",
+                "gemini",
+                "--write",
+                "--scope",
+                "project",
+            ],
+        ),
+        patch("mempalace.integrations.manager.run_integrations", return_value=0) as mock_run,
+    ):
+        main()
+        mock_run.assert_called_once_with(
+            hosts=["gemini"],
+            dry_run=False,
+            write=True,
+            palace=None,
+            scope="project",
+            remove=True,
+        )
+
+
+def test_main_help_mentions_integrate(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["mempalace"])
+
+    main()
+
+    captured = capsys.readouterr()
+    assert "mempalace integrate" in captured.out
+    assert "mempalace integrate remove" in captured.out
+
+
 def test_main_wakeup_dispatches():
     with (
         patch("sys.argv", ["mempalace", "wake-up"]),
@@ -334,9 +418,9 @@ def test_mcp_command_prints_setup_guidance(monkeypatch, capsys):
 
     captured = capsys.readouterr()
     assert "MemPalace MCP quick setup:" in captured.out
-    assert "claude mcp add mempalace -- python -m mempalace.mcp_server" in captured.out
+    assert "claude mcp add mempalace -- mempalace-mcp" in captured.out
     assert "\nOptional custom palace:\n" in captured.out
-    assert "python -m mempalace.mcp_server --palace /path/to/palace" in captured.out
+    assert "mempalace-mcp --palace /path/to/palace" in captured.out
     assert "[--palace /path/to/palace]" not in captured.out
     assert captured.err == ""
 
@@ -349,7 +433,7 @@ def test_mcp_command_uses_custom_palace_path_when_provided(monkeypatch, capsys):
     captured = capsys.readouterr()
     expanded = str(Path("~/tmp/my palace").expanduser())
 
-    assert "python -m mempalace.mcp_server --palace" in captured.out
+    assert "mempalace-mcp --palace" in captured.out
     assert expanded in captured.out
     assert "Optional custom palace:" not in captured.out
     assert "[--palace /path/to/palace]" not in captured.out

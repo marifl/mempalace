@@ -87,7 +87,10 @@ Other memory systems try to fix this by letting AI decide what's worth rememberi
 ## Quick Start
 
 ```bash
-pip install mempalace
+uv tool install --python 3.13 mempalace
+
+# Or, from a local clone:
+uv tool install --python 3.13 --editable /path/to/mempalace
 
 # Set up your world — who you work with, what your projects are
 mempalace init ~/projects/myapp
@@ -106,28 +109,41 @@ mempalace status
 
 Three mining modes: **projects** (code and docs), **convos** (conversation exports), and **general** (auto-classifies into decisions, preferences, milestones, problems, and emotional context). Everything stays on your machine.
 
+If your default Python is 3.14, keep the explicit `--python 3.13` flag. ChromaDB in the current tested range is not reliable on Python 3.14.
+
 ---
 
 ## How You Actually Use It
 
 After the one-time setup (install → init → mine), you don't run MemPalace commands manually. Your AI uses it for you. There are two ways, depending on which AI you use.
 
-### With Claude Code (recommended)
+### With Claude Code
 
-Native marketplace install:
+Preferred setup:
+
+```bash
+mempalace integrate claude --dry-run
+mempalace integrate claude --write
+```
+
+If you prefer the older plugin flow, the marketplace install remains available as a fallback:
 
 ```bash
 claude plugin marketplace add milla-jovovich/mempalace
 claude plugin install --scope user mempalace
 ```
 
-Restart Claude Code, then type `/skills` to verify "mempalace" appears.
+Restart Claude Code, then type `/skills` to verify the plugin is available.
 
 ### With Claude, ChatGPT, Cursor, Gemini (MCP-compatible tools)
 
 ```bash
-# Connect MemPalace once
-claude mcp add mempalace -- python -m mempalace.mcp_server
+# Recommended: let MemPalace detect and configure supported hosts
+mempalace integrate --dry-run
+mempalace integrate claude codex gemini --write
+
+# Or connect Claude manually
+claude mcp add mempalace -- mempalace-mcp
 ```
 
 Now your AI has 19 tools available through MCP. Ask it anything:
@@ -450,11 +466,18 @@ Letta charges $20–200/mo for agent-managed memory. MemPalace does it with a wi
 ## MCP Server
 
 ```bash
-# Via plugin (recommended)
+# Recommended: let MemPalace configure supported hosts for you
+mempalace integrate --dry-run
+mempalace integrate claude codex gemini --write
+
+# Legacy plugin fallback
 claude plugin marketplace add milla-jovovich/mempalace
 claude plugin install --scope user mempalace
 
-# Or manually
+# Or manually connect the stable MCP entrypoint
+claude mcp add mempalace -- mempalace-mcp
+
+# Legacy source-checkout fallback for older setups only
 claude mcp add mempalace -- python -m mempalace.mcp_server
 ```
 
@@ -696,7 +719,13 @@ mempalace/
 No API key. No internet after install. Everything local.
 
 ```bash
-pip install mempalace
+uv tool install --python 3.13 mempalace
+```
+
+If you are installing from a local checkout instead of PyPI, use:
+
+```bash
+uv tool install --python 3.13 --editable /path/to/mempalace
 ```
 
 ---

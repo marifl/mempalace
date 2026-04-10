@@ -3,7 +3,7 @@ Hook logic for MemPalace — Python implementation of session-start, stop, and p
 
 Reads JSON from stdin, outputs JSON to stdout.
 Supported hooks: session-start, stop, precompact
-Supported harnesses: claude-code, codex (extensible to cursor, gemini, etc.)
+Supported harnesses: claude-code, codex, gemini
 """
 
 import json
@@ -103,7 +103,7 @@ def _maybe_auto_ingest():
             pass
 
 
-SUPPORTED_HARNESSES = {"claude-code", "codex"}
+SUPPORTED_HARNESSES = {"claude-code", "codex", "gemini"}
 
 
 def _parse_harness_input(data: dict, harness: str) -> dict:
@@ -111,6 +111,14 @@ def _parse_harness_input(data: dict, harness: str) -> dict:
     if harness not in SUPPORTED_HARNESSES:
         print(f"Unknown harness: {harness}", file=sys.stderr)
         sys.exit(1)
+    if harness == "gemini":
+        return {
+            "session_id": _sanitize_session_id(str(data.get("session_id", "unknown"))),
+            "transcript_path": str(data.get("transcript_path", "")),
+            "cwd": str(data.get("cwd", "")),
+            "hook_event_name": str(data.get("hook_event_name", "")),
+            "trigger": str(data.get("trigger", "")),
+        }
     return {
         "session_id": _sanitize_session_id(str(data.get("session_id", "unknown"))),
         "stop_hook_active": data.get("stop_hook_active", False),
@@ -122,8 +130,8 @@ def hook_stop(data: dict, harness: str):
     """Stop hook: block every N messages for auto-save."""
     parsed = _parse_harness_input(data, harness)
     session_id = parsed["session_id"]
-    stop_hook_active = parsed["stop_hook_active"]
-    transcript_path = parsed["transcript_path"]
+    stop_hook_active = parsed.get("stop_hook_active", False)
+    transcript_path = parsed.get("transcript_path", "")
 
     # If already in a save cycle, let through (infinite-loop prevention)
     if str(stop_hook_active).lower() in ("true", "1", "yes"):
@@ -199,6 +207,10 @@ def hook_precompact(data: dict, harness: str):
                 )
         except OSError:
             pass
+
+    if harness == "gemini":
+        _output({"systemMessage": PRECOMPACT_BLOCK_REASON})
+        return
 
     # Always block -- compaction = save everything
     _output({"decision": "block", "reason": PRECOMPACT_BLOCK_REASON})
