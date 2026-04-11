@@ -372,6 +372,7 @@ class GeminiAdapter:
                     if existing
                     else "MemPalace PreCompress hook not present"
                 ),
+                operation="remove",
                 path=target_path,
                 requested_scope=requested_scope,
                 effective_scope=target_scope,
@@ -393,6 +394,7 @@ class GeminiAdapter:
             kind="hook",
             status="update" if existing else "create",
             summary="Update MemPalace PreCompress hook" if existing else "Add MemPalace PreCompress hook",
+            operation="upsert",
             path=target_path,
             requested_scope=requested_scope,
             effective_scope=target_scope,
@@ -452,7 +454,7 @@ class GeminiAdapter:
         path = self._target_path(action.effective_scope)
         payload = self._load_json(path)
         data = payload["data"] if isinstance(payload["data"], dict) else {}
-        if action.kind == "hook" and action.summary.startswith("Remove"):
+        if action.operation == "remove":
             updated = self._remove_hook(data)
         else:
             updated = self._upsert_hook(data)
@@ -466,7 +468,7 @@ class GeminiAdapter:
         self._verify_target_hook(path, action)
         summary = (
             "Removed MemPalace PreCompress hook"
-            if action.summary.startswith("Remove")
+            if action.operation == "remove"
             else "MemPalace PreCompress hook present"
         )
         return replace(action, status="skip", summary=summary, backup_path=backup_path)
@@ -720,7 +722,7 @@ class GeminiAdapter:
         if payload["invalid"] or not self._supported_json_shape(payload["data"]):
             raise RuntimeError(f"Gemini {action.effective_scope} settings are invalid after write")
         existing = self._find_mempalace_hook(payload["data"])
-        if action.summary.startswith("Remove"):
+        if action.operation == "remove":
             if existing is not None:
                 raise RuntimeError(
                     f"Gemini {action.effective_scope} settings still contain MemPalace hook after remove"

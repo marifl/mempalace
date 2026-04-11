@@ -266,6 +266,7 @@ def test_claude_cli_remove_verifies_target_layer_only(monkeypatch, tmp_path):
     assert commands[0] == ["claude", "mcp", "remove", "mempalace", "--scope", "project"]
     assert len(commands) == 1
     assert result.status == "skip"
+    assert result.summary == "Removed MemPalace MCP registration"
     assert json.loads(project_config.read_text(encoding="utf-8"))["mcpServers"] == {}
     assert json.loads((home_dir / ".claude.json").read_text(encoding="utf-8"))["mcpServers"]["mempalace"]
 

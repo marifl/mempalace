@@ -221,7 +221,12 @@ class ClaudeAdapter:
             raise RuntimeError(detail)
 
         self._verify_target_registration(self._target_path(action.effective_scope), action)
-        return replace(action, status="skip", summary="MemPalace MCP registration present")
+        summary = (
+            "Removed MemPalace MCP registration"
+            if action.kind == "remove"
+            else "MemPalace MCP registration present"
+        )
+        return replace(action, status="skip", summary=summary)
 
     def _apply_with_file(self, action: IntegrationAction) -> IntegrationAction:
         path = self._target_path(action.effective_scope)

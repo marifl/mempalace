@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from pathlib import Path
 from subprocess import CompletedProcess
 
@@ -188,3 +189,32 @@ def test_gemini_prefers_host_cli_for_mcp_but_file_patch_for_hooks(tmp_path, monk
     assert payload["hooks"]["PreCompress"][0]["hooks"][0]["command"] == _gemini_hook_command()
     assert mcp_result.status == "skip"
     assert hook_result.status == "skip"
+
+
+def test_gemini_remove_hook_uses_structured_operation_not_summary(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    project_root = tmp_path / "project"
+    user_settings = home_dir / ".gemini" / "settings.json"
+    _write_settings(
+        user_settings,
+        {
+            "hooks": {
+                "PreCompress": [
+                    _gemini_hook_definition(),
+                ]
+            },
+        },
+    )
+    monkeypatch.setattr("mempalace.integrations.gemini.shutil.which", lambda _name: None)
+
+    adapter = GeminiAdapter(home_dir=home_dir, project_root=project_root)
+    actions = adapter.plan(scope="user", remove=True)
+    hook_action = next(action for action in actions if action.kind == "hook")
+
+    assert hook_action.operation == "remove"
+
+    result = adapter.apply(replace(hook_action, summary="changed copy should not matter"))
+    payload = json.loads(user_settings.read_text(encoding="utf-8"))
+
+    assert result.summary == "Removed MemPalace PreCompress hook"
+    assert payload.get("hooks", {}) == {}

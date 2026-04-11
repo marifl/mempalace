@@ -11,6 +11,7 @@ class IntegrationAction:
     kind: str
     status: str
     summary: str
+    operation: str = "apply"
     path: Optional[Path] = None
     requested_scope: str = "auto"
     effective_scope: Optional[str] = None

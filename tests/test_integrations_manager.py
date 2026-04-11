@@ -68,6 +68,28 @@ def test_explicit_hosts_override_autodiscovery():
     assert codex.detect_calls == 0
 
 
+def test_run_integrations_rejects_unknown_explicit_hosts(monkeypatch, capsys):
+    claude = FakeAdapter("claude")
+    codex = FakeAdapter("codex")
+    monkeypatch.setattr("mempalace.integrations.manager.get_adapters", lambda: [claude, codex])
+
+    result = run_integrations(
+        hosts=["claud"],
+        dry_run=True,
+        write=False,
+        palace=None,
+        scope="auto",
+        remove=False,
+    )
+
+    assert result == 1
+    captured = capsys.readouterr()
+    assert "Unknown hosts" in captured.err
+    assert "claud" in captured.err
+    assert "claude" in captured.err
+    assert "codex" in captured.err
+
+
 def test_dry_run_returns_plan_without_apply(monkeypatch):
     claude = FakeAdapter(
         "claude",

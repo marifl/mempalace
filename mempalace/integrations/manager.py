@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import replace
 
 from .base import IntegrationAction
@@ -22,6 +23,11 @@ def get_adapters():
 def select_adapters(adapters, hosts):
     if hosts:
         by_name = {adapter.name: adapter for adapter in adapters}
+        unknown = [name for name in hosts if name not in by_name]
+        if unknown:
+            supported = ", ".join(sorted(by_name))
+            unknown_list = ", ".join(unknown)
+            raise ValueError(f"Unknown hosts: {unknown_list}. Supported hosts: {supported}")
         return [by_name[name] for name in hosts if name in by_name]
     return [adapter for adapter in adapters if adapter.detect()]
 
@@ -85,7 +91,11 @@ def apply_plan(plan):
 
 def run_integrations(*, hosts, dry_run, write, palace, scope, remove):
     adapters = get_adapters()
-    selected = select_adapters(adapters, hosts)
+    try:
+        selected = select_adapters(adapters, hosts)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
     plan = build_plan(selected, palace=palace, scope=scope, remove=remove)
     render_plan(plan)
     if not plan:
