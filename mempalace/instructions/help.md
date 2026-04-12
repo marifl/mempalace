@@ -74,6 +74,10 @@ If your default Python is 3.14, keep the explicit `--python 3.13` flag for uv to
 
 ## Auto-Save Hooks
 
+- Claude Code hooks -- `SessionStart`, `Stop`, and `PreCompact`
+- Codex hooks -- `SessionStart`, `Stop`, and `PreCompact`
+- Gemini hook -- `PreCompress`
+
 - Stop hook -- Automatically saves memories every 15 messages. Counts human
   messages in the session transcript (skipping command-messages). When the
   threshold is reached, blocks the AI with a save instruction. Uses

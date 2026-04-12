@@ -126,6 +126,19 @@ mempalace integrate claude --dry-run
 mempalace integrate claude --write
 ```
 
+That native setup now configures:
+
+- the `mempalace-mcp` server registration
+- Claude save hooks in `~/.claude/settings.json` or project-local `.claude/settings.json`
+- `SessionStart`, `Stop`, and `PreCompact` hook handlers
+
+Verify it with:
+
+```bash
+claude mcp list
+cat ~/.claude/settings.json
+```
+
 If you prefer the older plugin flow, the marketplace install remains available as a fallback:
 
 ```bash
@@ -133,7 +146,7 @@ claude plugin marketplace add milla-jovovich/mempalace
 claude plugin install --scope user mempalace
 ```
 
-Restart Claude Code, then type `/skills` to verify the plugin is available.
+Restart Claude Code after changing host configuration.
 
 ### With Claude, ChatGPT, Cursor, Gemini (MCP-compatible tools)
 
@@ -152,7 +165,7 @@ Now your AI has 19 tools available through MCP. Ask it anything:
 
 Claude calls `mempalace_search` automatically, gets verbatim results, and answers you. You never type `mempalace search` again. The AI handles it.
 
-MemPalace also works natively with **Gemini CLI** (which handles the server and save hooks automatically) — see the [Gemini CLI Integration Guide](examples/gemini_cli_setup.md).
+MemPalace also works natively with **Gemini CLI** and now configures **Claude Code** hooks through the integration manager — see the [Gemini CLI Integration Guide](examples/gemini_cli_setup.md).
 
 ### With local models (Llama, Mistral, or any offline LLM)
 
@@ -533,20 +546,59 @@ The AI learns AAAK and the memory protocol automatically from the `mempalace_sta
 
 ## Auto-Save Hooks
 
-Two hooks for Claude Code that automatically save memories during work:
+MemPalace ships native save hooks for supported hosts:
 
-**Save Hook** — every 15 messages, triggers a structured save. Topics, decisions, quotes, code changes. Also regenerates the critical facts layer.
+- **Claude Code**: `SessionStart`, `Stop`, and `PreCompact`
+- **Codex**: `SessionStart`, `Stop`, and `PreCompact`
+- **Gemini CLI**: `PreCompress`
 
-**PreCompact Hook** — fires before context compression. Emergency save before the window shrinks.
+For Claude, `mempalace integrate claude --write` writes native hook entries into `~/.claude/settings.json` or project-local `.claude/settings.json` / `.claude/settings.local.json`.
 
 ```json
 {
   "hooks": {
-    "Stop": [{"matcher": "", "hooks": [{"type": "command", "command": "/path/to/mempalace/hooks/mempal_save_hook.sh"}]}],
-    "PreCompact": [{"matcher": "", "hooks": [{"type": "command", "command": "/path/to/mempalace/hooks/mempal_precompact_hook.sh"}]}]
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "name": "mempalace-session-start",
+            "command": "mempalace hook run --hook session-start --harness claude-code"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "name": "mempalace-stop",
+            "command": "mempalace hook run --hook stop --harness claude-code"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "name": "mempalace-precompact",
+            "command": "mempalace hook run --hook precompact --harness claude-code"
+          }
+        ]
+      }
+    ]
   }
 }
 ```
+
+Behavior:
+
+- **Stop**: every 15 user messages, block with a structured save checkpoint
+- **PreCompact / PreCompress**: emergency save before context compression
+- **SessionStart**: initialize hook state for the session
 
 **Optional auto-ingest:** Set the `MEMPAL_DIR` environment variable to a directory path and the hooks will automatically run `mempalace mine` on that directory during each save trigger (background on stop, synchronous on precompact).
 
@@ -668,8 +720,7 @@ Plain text. Becomes Layer 0 — loaded every session.
 | `entity_registry.py` | Entity code registry |
 | `entity_detector.py` | Auto-detect people and projects from content |
 | `split_mega_files.py` | Split concatenated transcripts into per-session files |
-| `hooks/mempal_save_hook.sh` | Auto-save every N messages |
-| `hooks/mempal_precompact_hook.sh` | Emergency save before compaction |
+| `mempalace/hooks_cli.py` | Native hook dispatcher for Claude, Codex, and Gemini |
 
 ---
 
@@ -695,10 +746,8 @@ mempalace/
 │   ├── longmemeval_bench.py   ← LongMemEval runner
 │   ├── locomo_bench.py        ← LoCoMo runner
 │   └── membench_bench.py      ← MemBench runner
-├── hooks/                     ← Claude Code auto-save hooks
-│   ├── README.md              ← hook setup guide
-│   ├── mempal_save_hook.sh    ← save every N messages
-│   └── mempal_precompact_hook.sh ← emergency save
+├── .codex-plugin/             ← Codex plugin fallback with MCP + hooks
+├── mempalace/hooks_cli.py     ← native hook logic for supported hosts
 ├── examples/                  ← usage examples
 │   ├── basic_mining.py
 │   ├── convo_import.py
