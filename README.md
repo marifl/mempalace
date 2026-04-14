@@ -567,7 +567,7 @@ For Codex, `mempalace integrate codex --write` writes native hook entries into `
           {
             "type": "command",
             "name": "mempalace-session-start",
-            "command": "mempalace hook run --hook session-start --harness claude-code"
+            "command": "mempalace hook run --hook session-start --harness codex"
           }
         ]
       }
@@ -578,18 +578,7 @@ For Codex, `mempalace integrate codex --write` writes native hook entries into `
           {
             "type": "command",
             "name": "mempalace-stop",
-            "command": "mempalace hook run --hook stop --harness claude-code"
-          }
-        ]
-      }
-    ],
-    "PreCompact": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "name": "mempalace-precompact",
-            "command": "mempalace hook run --hook precompact --harness claude-code"
+            "command": "mempalace hook run --hook stop --harness codex"
           }
         ]
       }
@@ -597,6 +586,8 @@ For Codex, `mempalace integrate codex --write` writes native hook entries into `
   }
 }
 ```
+
+Claude uses the same hook shape with `--harness claude-code` and adds `PreCompact`.
 
 Behavior:
 

@@ -341,6 +341,8 @@ class CodexAdapter:
 
     def _apply_hook_with_file(self, action: IntegrationAction) -> IntegrationAction:
         payload = self._load_json_object(action.path)
+        if payload["invalid"]:
+            raise RuntimeError("Codex user hooks are invalid JSON; refusing fallback write")
         current = payload["data"] if isinstance(payload["data"], dict) else {}
         if not self._supported_hooks_shape(current):
             raise RuntimeError("Codex user hooks shape is unsupported for fallback write")
@@ -444,7 +446,23 @@ class CodexAdapter:
         if not isinstance(data, dict):
             return False
         hooks = data.get("hooks")
-        return hooks is None or isinstance(hooks, dict)
+        if hooks is None:
+            return True
+        if not isinstance(hooks, dict):
+            return False
+        for event, _hook_name in CodexAdapter._HOOK_EVENTS:
+            if event not in hooks:
+                continue
+            definitions = hooks[event]
+            if not isinstance(definitions, list):
+                return False
+            for definition in definitions:
+                if not isinstance(definition, dict):
+                    return False
+                hook_entries = definition.get("hooks")
+                if hook_entries is not None and not isinstance(hook_entries, list):
+                    return False
+        return True
 
     @classmethod
     def _find_hook_group(cls, hooks: dict[str, object], event: str) -> Optional[dict[str, object]]:

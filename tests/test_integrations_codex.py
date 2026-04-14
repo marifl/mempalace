@@ -98,6 +98,35 @@ def test_codex_hook_shadowing_reports_repo_plugin_hooks(tmp_path, monkeypatch):
     assert hook_action.shadowed_by == "repo-plugin"
 
 
+def test_codex_hook_plan_rejects_non_list_target_event_shapes(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    hooks_path = home_dir / ".codex" / "hooks.json"
+    hooks_path.parent.mkdir(parents=True)
+    hooks_path.write_text(json.dumps({"hooks": {"SessionStart": {"matcher": "*"}}}), encoding="utf-8")
+    monkeypatch.setattr("mempalace.integrations.codex.shutil.which", lambda _name: None)
+
+    adapter = CodexAdapter(home_dir=home_dir, project_root=tmp_path / "repo")
+    actions = adapter.plan(palace=None, scope="auto", remove=False)
+    hook_action = next(action for action in actions if action.kind == "hook")
+
+    assert hook_action.status == "cannot_apply"
+    assert hook_action.summary == "Codex user hooks shape is unsupported for fallback write"
+
+
+def test_codex_hook_apply_refuses_invalid_json_after_plan(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    monkeypatch.setattr("mempalace.integrations.codex.shutil.which", lambda _name: None)
+
+    adapter = CodexAdapter(home_dir=home_dir, project_root=tmp_path / "repo")
+    actions = adapter.plan(palace=None, scope="auto", remove=False)
+    hook_action = next(action for action in actions if action.kind == "hook")
+    hook_action.path.parent.mkdir(parents=True)
+    hook_action.path.write_text("{not valid json", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="invalid JSON"):
+        adapter.apply(hook_action)
+
+
 def test_codex_prefers_host_cli_when_codex_binary_exists(tmp_path, monkeypatch):
     commands = []
 
