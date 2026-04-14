@@ -43,8 +43,8 @@ def build_plan(adapters, *, palace, scope, remove):
     return plan
 
 
-def render_plan(plan):
-    print("MemPalace integration plan:")
+def _render_actions(plan, *, header):
+    print(header)
     if not plan:
         print("  No matching hosts detected.")
         return
@@ -62,6 +62,14 @@ def render_plan(plan):
             print(f"  shadowed-by={action.shadowed_by}")
         if action.path:
             print(f"  path={action.path}")
+
+
+def render_plan(plan):
+    _render_actions(plan, header="MemPalace integration plan:")
+
+
+def render_results(plan):
+    _render_actions(plan, header="MemPalace integration results:")
 
 
 def _confirm():
@@ -106,5 +114,7 @@ def run_integrations(*, hosts, dry_run, write, palace, scope, remove):
     if dry_run:
         return 0
     if not write and not _confirm():
-        return 1
-    return apply_plan(plan)
+        return 0
+    exit_code = apply_plan(plan)
+    render_results(plan)
+    return exit_code

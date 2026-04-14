@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -186,6 +187,57 @@ def test_confirm_treats_eof_as_decline(monkeypatch):
     from mempalace.integrations import manager
 
     assert manager._confirm() is False
+
+
+def test_confirm_decline_returns_zero_and_skips_apply(monkeypatch):
+    claude = FakeAdapter(
+        "claude",
+        planner=IntegrationAction(
+            host="claude",
+            kind="mcp",
+            status="create",
+            summary="Add MemPalace MCP server",
+            use_host_cli=True,
+        ),
+    )
+
+    monkeypatch.setattr("mempalace.integrations.manager.get_adapters", lambda: [claude])
+    monkeypatch.setattr("mempalace.integrations.manager._confirm", lambda: False)
+    monkeypatch.setattr(
+        "mempalace.integrations.manager.apply_plan",
+        lambda _plan: pytest.fail("declined confirmation should not apply"),
+    )
+
+    result = run_integrations(hosts=[], dry_run=False, write=False, palace=None, scope="auto", remove=False)
+
+    assert result == 0
+
+
+def test_run_integrations_renders_apply_results(monkeypatch, capsys):
+    claude = FakeAdapter(
+        "claude",
+        planner=IntegrationAction(
+            host="claude",
+            kind="mcp",
+            status="create",
+            summary="Add MemPalace MCP server",
+            use_host_cli=True,
+        ),
+        apply_impl=lambda action: replace(
+            action,
+            status="skip",
+            summary="MemPalace MCP registration present",
+        ),
+    )
+
+    monkeypatch.setattr("mempalace.integrations.manager.get_adapters", lambda: [claude])
+
+    result = run_integrations(hosts=[], dry_run=False, write=True, palace=None, scope="auto", remove=False)
+
+    assert result == 0
+    captured = capsys.readouterr()
+    assert "MemPalace integration results:" in captured.out
+    assert "MemPalace MCP registration present" in captured.out
 
 
 def test_manager_isolates_failures_per_host(monkeypatch):

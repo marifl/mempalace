@@ -167,6 +167,8 @@ Claude calls `mempalace_search` automatically, gets verbatim results, and answer
 
 MemPalace also works natively with **Gemini CLI** and now configures **Claude Code** hooks through the integration manager — see the [Gemini CLI Integration Guide](examples/gemini_cli_setup.md).
 
+For Codex, `mempalace integrate codex --write` now configures both the MCP server registration in `~/.codex/config.toml` and native hooks in `~/.codex/hooks.json`.
+
 ### With local models (Llama, Mistral, or any offline LLM)
 
 Local models generally don't speak MCP yet. Two approaches:
@@ -549,10 +551,12 @@ The AI learns AAAK and the memory protocol automatically from the `mempalace_sta
 MemPalace ships native save hooks for supported hosts:
 
 - **Claude Code**: `SessionStart`, `Stop`, and `PreCompact`
-- **Codex**: `SessionStart`, `Stop`, and `PreCompact`
+- **Codex**: `SessionStart` and `Stop`
 - **Gemini CLI**: `PreCompress`
 
 For Claude, `mempalace integrate claude --write` writes native hook entries into `~/.claude/settings.json` or project-local `.claude/settings.json` / `.claude/settings.local.json`.
+
+For Codex, `mempalace integrate codex --write` writes native hook entries into `~/.codex/hooks.json`.
 
 ```json
 {
@@ -597,7 +601,7 @@ For Claude, `mempalace integrate claude --write` writes native hook entries into
 Behavior:
 
 - **Stop**: every 15 user messages, block with a structured save checkpoint
-- **PreCompact / PreCompress**: emergency save before context compression
+- **PreCompact / PreCompress**: emergency save before context compression where the host exposes a compaction hook
 - **SessionStart**: initialize hook state for the session
 
 **Optional auto-ingest:** Set the `MEMPAL_DIR` environment variable to a directory path and the hooks will automatically run `mempalace mine` on that directory during each save trigger (background on stop, synchronous on precompact).
