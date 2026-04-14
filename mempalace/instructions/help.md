@@ -51,6 +51,7 @@ AI memory system. Store everything, find anything. Local, free, no API key.
 
 ## CLI Commands
 
+    uv tool install --python 3.13 mempalace   Install globally with uv
     mempalace init <dir>                  Initialize a new palace
     mempalace mine <dir>                  Mine a project (default mode)
     mempalace mine <dir> --mode convos    Mine conversation exports
@@ -61,12 +62,21 @@ AI memory system. Store everything, find anything. Local, free, no API key.
     mempalace status                      Show palace status
     mempalace repair                      Rebuild vector index
     mempalace mcp                         Show MCP setup command
+    mempalace integrate                   Autodiscover and plan host integration
+    mempalace integrate --dry-run         Preview host changes without writing
+    mempalace integrate remove            Remove MemPalace-managed host setup
     mempalace hook run                    Run hook logic (for harness integration)
     mempalace instructions <name>         Output skill instructions
+
+If your default Python is 3.14, keep the explicit `--python 3.13` flag for uv tool installs.
 
 ---
 
 ## Auto-Save Hooks
+
+- Claude Code hooks -- `SessionStart`, `Stop`, and `PreCompact`
+- Codex hooks -- `SessionStart`, `Stop`, and `PreCompact`
+- Gemini hook -- `PreCompress`
 
 - Stop hook -- Automatically saves memories every 15 messages. Counts human
   messages in the session transcript (skipping command-messages). When the
@@ -77,6 +87,10 @@ AI memory system. Store everything, find anything. Local, free, no API key.
 - PreCompact hook -- Emergency save before context compaction. Always blocks
   with a comprehensive save instruction because compaction means the AI is
   about to lose detailed context.
+
+- Gemini PreCompress hook -- Advisory-only save warning before Gemini context
+  compression. Emits a `systemMessage` and does not try to block compaction,
+  because Gemini ignores flow-control for `PreCompress`.
 
 Hooks read JSON from stdin and output JSON to stdout. They can be invoked via:
 

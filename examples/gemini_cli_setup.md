@@ -1,95 +1,51 @@
 # Gemini CLI Integration Guide
 
-This guide explains how to set up MemPalace as a permanent memory for the [Gemini CLI](https://github.com/google/gemini-cli).
+This guide sets up MemPalace for the [Gemini CLI](https://github.com/google/gemini-cli) using the current `uv`-first path.
 
-## Prerequisites
+## 1. Install MemPalace
 
-- Python 3.9+
-- Gemini CLI installed and configured
-
-## 1. Installation
-
-On many Linux systems, installing Python packages globally is restricted. We recommend using a local virtual environment within the MemPalace directory.
+Use the verified Python 3.13 tool install:
 
 ```bash
-# Clone the repository (if you haven't already)
-git clone https://github.com/milla-jovovich/mempalace.git
-cd mempalace
-
-# Create a virtual environment
-python3 -m venv .venv
-
-# Install dependencies and MemPalace in editable mode
-.venv/bin/pip install -e .
+uv tool install --python 3.13 mempalace
 ```
 
-## 2. Initialization
-
-Set up your "Palace" (the database) and configure your identity.
+If you are working from a local clone instead of PyPI, use:
 
 ```bash
-# Initialize the palace in the current directory
-.venv/bin/python3 -m mempalace init .
+uv tool install --python 3.13 --editable /path/to/mempalace
 ```
 
-### Identity and Wings (Optional but Recommended)
-You can manually define who you are and what projects you work on by creating/editing these files in `~/.mempalace/`:
+If your machine defaults to Python 3.14, keep the explicit `--python 3.13` flag.
 
-- **`~/.mempalace/identity.txt`**: A plain text file describing your role and focus.
-- **`~/.mempalace/wing_config.json`**: A JSON file mapping projects and name variants to "Wings".
+## 2. Connect Gemini MCP
 
-## 3. Connect to Gemini CLI (MCP)
-
-Register MemPalace as an MCP server so Gemini CLI can use its tools.
+Let MemPalace plan the setup first:
 
 ```bash
-gemini mcp add mempalace /absolute/path/to/mempalace/.venv/bin/python3 -m mempalace.mcp_server --scope user
-```
-*Note: Use the absolute path to ensure it works from any directory.*
-
-## 4. Enable Auto-Saving (Hooks)
-
-To ensure the AI saves memories automatically when conversation history becomes too long, add a `PreCompress` hook to your Gemini CLI settings.
-
-Edit your `~/.gemini/settings.json` and add the following:
-
-```json
-{
-  "hooks": {
-    "PreCompress": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/absolute/path/to/mempalace/hooks/mempal_precompact_hook.sh"
-          }
-        ]
-      }
-    ]
-  }
-}
+mempalace integrate gemini --dry-run
+mempalace integrate gemini --write
 ```
 
-Make sure the hook scripts are executable:
+If you prefer to configure Gemini manually, use the stable MCP entrypoint:
+
 ```bash
-chmod +x hooks/*.sh
+gemini mcp add mempalace mempalace-mcp --scope user
 ```
 
-## 5. Usage
+## 3. Gemini Hook Behavior
 
-Once connected, Gemini CLI will automatically:
-- Start the MemPalace server on launch.
-- Use `mempalace_search` to find relevant past discussions.
-- Use the `PreCompress` hook to save new memories before they are lost.
+Gemini’s `PreCompress` hook is advisory-only. It can remind Gemini to save memory before compression, but it does not block compression if the hook fails.
 
-### Manual Mining
-If you want the AI to learn from your existing code or docs immediately, run the "mine" command:
+If you want automatic pre-compression saving, add a `PreCompress` hook that calls:
+
 ```bash
-.venv/bin/python3 -m mempalace mine /path/to/your/project
+mempalace hook run --hook precompact --harness gemini
 ```
 
-### Verification
-In a Gemini CLI session, you can run:
-- `/mcp list`: Verify `mempalace` is `CONNECTED`.
-- `/hooks panel`: Verify the `PreCompress` hook is active.
+## 4. Practical Notes
+
+- `mempalace-mcp` is the stable server entrypoint.
+- `mempalace integrate gemini` is the preferred setup path.
+- Use the manual `gemini mcp add ...` flow only if you need to wire things by hand.
+- Keep the explicit Python 3.13 install on systems where Python 3.14 is the default.

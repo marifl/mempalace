@@ -19,8 +19,18 @@ mempalace --version
 If not installed:
 
 ```bash
-pip install mempalace
+uv tool install --python 3.13 --editable /path/to/mempalace
 ```
+
+If you are working from the repository root, use `uv tool install --python 3.13 --editable .`.
+
+For Claude setup, prefer the integration manager first:
+
+```bash
+mempalace integrate claude --write
+```
+
+The Claude plugin marketplace flow remains a legacy fallback if you already manage MemPalace through the plugin.
 
 ## Usage
 

@@ -87,7 +87,10 @@ Other memory systems try to fix this by letting AI decide what's worth rememberi
 ## Quick Start
 
 ```bash
-pip install mempalace
+uv tool install --python 3.13 mempalace
+
+# Or, from a local clone:
+uv tool install --python 3.13 --editable /path/to/mempalace
 
 # Set up your world — who you work with, what your projects are
 mempalace init ~/projects/myapp
@@ -106,28 +109,54 @@ mempalace status
 
 Three mining modes: **projects** (code and docs), **convos** (conversation exports), and **general** (auto-classifies into decisions, preferences, milestones, problems, and emotional context). Everything stays on your machine.
 
+If your default Python is 3.14, keep the explicit `--python 3.13` flag. ChromaDB in the current tested range is not reliable on Python 3.14.
+
 ---
 
 ## How You Actually Use It
 
 After the one-time setup (install → init → mine), you don't run MemPalace commands manually. Your AI uses it for you. There are two ways, depending on which AI you use.
 
-### With Claude Code (recommended)
+### With Claude Code
 
-Native marketplace install:
+Preferred setup:
+
+```bash
+mempalace integrate claude --dry-run
+mempalace integrate claude --write
+```
+
+That native setup now configures:
+
+- the `mempalace-mcp` server registration
+- Claude save hooks in `~/.claude/settings.json` or project-local `.claude/settings.json`
+- `SessionStart`, `Stop`, and `PreCompact` hook handlers
+
+Verify it with:
+
+```bash
+claude mcp list
+cat ~/.claude/settings.json
+```
+
+If you prefer the older plugin flow, the marketplace install remains available as a fallback:
 
 ```bash
 claude plugin marketplace add milla-jovovich/mempalace
 claude plugin install --scope user mempalace
 ```
 
-Restart Claude Code, then type `/skills` to verify "mempalace" appears.
+Restart Claude Code after changing host configuration.
 
 ### With Claude, ChatGPT, Cursor, Gemini (MCP-compatible tools)
 
 ```bash
-# Connect MemPalace once
-claude mcp add mempalace -- python -m mempalace.mcp_server
+# Recommended: let MemPalace detect and configure supported hosts
+mempalace integrate --dry-run
+mempalace integrate claude codex gemini --write
+
+# Or connect Claude manually
+claude mcp add mempalace -- mempalace-mcp
 ```
 
 Now your AI has 19 tools available through MCP. Ask it anything:
@@ -136,7 +165,7 @@ Now your AI has 19 tools available through MCP. Ask it anything:
 
 Claude calls `mempalace_search` automatically, gets verbatim results, and answers you. You never type `mempalace search` again. The AI handles it.
 
-MemPalace also works natively with **Gemini CLI** (which handles the server and save hooks automatically) — see the [Gemini CLI Integration Guide](examples/gemini_cli_setup.md).
+MemPalace also works natively with **Gemini CLI** and now configures **Claude Code** hooks through the integration manager — see the [Gemini CLI Integration Guide](examples/gemini_cli_setup.md).
 
 ### With local models (Llama, Mistral, or any offline LLM)
 
@@ -450,11 +479,18 @@ Letta charges $20–200/mo for agent-managed memory. MemPalace does it with a wi
 ## MCP Server
 
 ```bash
-# Via plugin (recommended)
+# Recommended: let MemPalace configure supported hosts for you
+mempalace integrate --dry-run
+mempalace integrate claude codex gemini --write
+
+# Legacy plugin fallback
 claude plugin marketplace add milla-jovovich/mempalace
 claude plugin install --scope user mempalace
 
-# Or manually
+# Or manually connect the stable MCP entrypoint
+claude mcp add mempalace -- mempalace-mcp
+
+# Legacy source-checkout fallback for older setups only
 claude mcp add mempalace -- python -m mempalace.mcp_server
 ```
 
@@ -510,20 +546,59 @@ The AI learns AAAK and the memory protocol automatically from the `mempalace_sta
 
 ## Auto-Save Hooks
 
-Two hooks for Claude Code that automatically save memories during work:
+MemPalace ships native save hooks for supported hosts:
 
-**Save Hook** — every 15 messages, triggers a structured save. Topics, decisions, quotes, code changes. Also regenerates the critical facts layer.
+- **Claude Code**: `SessionStart`, `Stop`, and `PreCompact`
+- **Codex**: `SessionStart`, `Stop`, and `PreCompact`
+- **Gemini CLI**: `PreCompress`
 
-**PreCompact Hook** — fires before context compression. Emergency save before the window shrinks.
+For Claude, `mempalace integrate claude --write` writes native hook entries into `~/.claude/settings.json` or project-local `.claude/settings.json` / `.claude/settings.local.json`.
 
 ```json
 {
   "hooks": {
-    "Stop": [{"matcher": "", "hooks": [{"type": "command", "command": "/path/to/mempalace/hooks/mempal_save_hook.sh"}]}],
-    "PreCompact": [{"matcher": "", "hooks": [{"type": "command", "command": "/path/to/mempalace/hooks/mempal_precompact_hook.sh"}]}]
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "name": "mempalace-session-start",
+            "command": "mempalace hook run --hook session-start --harness claude-code"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "name": "mempalace-stop",
+            "command": "mempalace hook run --hook stop --harness claude-code"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "name": "mempalace-precompact",
+            "command": "mempalace hook run --hook precompact --harness claude-code"
+          }
+        ]
+      }
+    ]
   }
 }
 ```
+
+Behavior:
+
+- **Stop**: every 15 user messages, block with a structured save checkpoint
+- **PreCompact / PreCompress**: emergency save before context compression
+- **SessionStart**: initialize hook state for the session
 
 **Optional auto-ingest:** Set the `MEMPAL_DIR` environment variable to a directory path and the hooks will automatically run `mempalace mine` on that directory during each save trigger (background on stop, synchronous on precompact).
 
@@ -645,8 +720,7 @@ Plain text. Becomes Layer 0 — loaded every session.
 | `entity_registry.py` | Entity code registry |
 | `entity_detector.py` | Auto-detect people and projects from content |
 | `split_mega_files.py` | Split concatenated transcripts into per-session files |
-| `hooks/mempal_save_hook.sh` | Auto-save every N messages |
-| `hooks/mempal_precompact_hook.sh` | Emergency save before compaction |
+| `mempalace/hooks_cli.py` | Native hook dispatcher for Claude, Codex, and Gemini |
 
 ---
 
@@ -672,10 +746,8 @@ mempalace/
 │   ├── longmemeval_bench.py   ← LongMemEval runner
 │   ├── locomo_bench.py        ← LoCoMo runner
 │   └── membench_bench.py      ← MemBench runner
-├── hooks/                     ← Claude Code auto-save hooks
-│   ├── README.md              ← hook setup guide
-│   ├── mempal_save_hook.sh    ← save every N messages
-│   └── mempal_precompact_hook.sh ← emergency save
+├── .codex-plugin/             ← Codex plugin fallback with MCP + hooks
+├── mempalace/hooks_cli.py     ← native hook logic for supported hosts
 ├── examples/                  ← usage examples
 │   ├── basic_mining.py
 │   ├── convo_import.py
@@ -696,7 +768,13 @@ mempalace/
 No API key. No internet after install. Everything local.
 
 ```bash
-pip install mempalace
+uv tool install --python 3.13 mempalace
+```
+
+If you are installing from a local checkout instead of PyPI, use:
+
+```bash
+uv tool install --python 3.13 --editable /path/to/mempalace
 ```
 
 ---

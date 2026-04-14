@@ -15,6 +15,8 @@ Commands:
     mempalace mine <dir> --mode convos    Mine conversation exports
     mempalace search "query"              Find anything, exact words
     mempalace mcp                         Show MCP setup command
+    mempalace integrate                   Configure MCP hosts
+    mempalace integrate remove            Remove MCP host integration
     mempalace wake-up                     Show L0 + L1 wake-up context
     mempalace wake-up --wing my_app       Wake-up for a specific project
     mempalace status                      Show what's been filed
@@ -245,7 +247,7 @@ def cmd_instructions(args):
 
 def cmd_mcp(args):
     """Show how to wire MemPalace into MCP-capable hosts."""
-    base_server_cmd = "python -m mempalace.mcp_server"
+    base_server_cmd = "mempalace-mcp"
 
     if args.palace:
         resolved_palace = str(Path(args.palace).expanduser())
@@ -262,6 +264,34 @@ def cmd_mcp(args):
         print("\nOptional custom palace:")
         print(f"  claude mcp add mempalace -- {base_server_cmd} --palace /path/to/palace")
         print(f"  {base_server_cmd} --palace /path/to/palace")
+
+
+def cmd_integrate(args):
+    """Configure MemPalace for supported MCP-capable hosts."""
+    from .integrations.manager import run_integrations
+
+    return run_integrations(
+        hosts=getattr(args, "hosts", []),
+        dry_run=getattr(args, "dry_run", False),
+        write=getattr(args, "write", False),
+        palace=args.palace,
+        scope=getattr(args, "scope", "auto"),
+        remove=False,
+    )
+
+
+def cmd_integrate_remove(args):
+    """Remove MemPalace integration from supported MCP-capable hosts."""
+    from .integrations.manager import run_integrations
+
+    return run_integrations(
+        hosts=getattr(args, "hosts", []),
+        dry_run=getattr(args, "dry_run", False),
+        write=getattr(args, "write", False),
+        palace=args.palace,
+        scope=getattr(args, "scope", "auto"),
+        remove=True,
+    )
 
 
 def cmd_compress(args):
@@ -505,7 +535,7 @@ def main():
     p_hook_run.add_argument(
         "--harness",
         required=True,
-        choices=["claude-code", "codex"],
+        choices=["claude-code", "codex", "gemini"],
         help="Harness type (determines stdin JSON format)",
     )
 
@@ -517,6 +547,33 @@ def main():
     instructions_sub = p_instructions.add_subparsers(dest="instructions_name")
     for instr_name in ["init", "search", "mine", "help", "status"]:
         instructions_sub.add_parser(instr_name, help=f"Output {instr_name} instructions")
+
+    # integrate
+    p_integrate = sub.add_parser(
+        "integrate",
+        help="Configure MemPalace for MCP-capable hosts",
+    )
+    p_integrate.add_argument(
+        "integrate_targets",
+        nargs="*",
+        help="Optional hosts, or start with 'remove' to remove existing integration",
+    )
+    p_integrate.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Render the integration plan without writing changes",
+    )
+    p_integrate.add_argument(
+        "--write",
+        action="store_true",
+        help="Apply the integration plan without interactive confirmation",
+    )
+    p_integrate.add_argument(
+        "--scope",
+        default="auto",
+        choices=["auto", "user", "project"],
+        help="Preferred configuration scope to target",
+    )
 
     # repair
     sub.add_parser(
@@ -554,6 +611,18 @@ def main():
             return
         args.name = name
         cmd_instructions(args)
+        return
+
+    if args.command == "integrate":
+        targets = list(getattr(args, "integrate_targets", []))
+        if targets[:1] == ["remove"]:
+            args.hosts = targets[1:]
+            result = cmd_integrate_remove(args)
+        else:
+            args.hosts = targets
+            result = cmd_integrate(args)
+        if isinstance(result, int) and result:
+            sys.exit(result)
         return
 
     dispatch = {

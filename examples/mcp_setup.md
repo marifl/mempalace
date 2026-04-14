@@ -2,17 +2,39 @@
 
 ## Setup
 
+Install MemPalace as a uv tool:
+
+```bash
+uv tool install --python 3.13 mempalace
+```
+
+If you are working from a local clone instead of PyPI, use:
+
+```bash
+uv tool install --python 3.13 --editable /path/to/mempalace
+```
+
+Then let MemPalace wire Claude for you:
+
+```bash
+mempalace integrate claude --write
+```
+
+Or configure Claude manually:
+
 Run the MCP server:
 
 ```bash
-python -m mempalace.mcp_server
+mempalace-mcp
 ```
 
 Or add it to Claude Code:
 
 ```bash
-claude mcp add mempalace -- python -m mempalace.mcp_server
+claude mcp add mempalace -- mempalace-mcp
 ```
+
+Keep the explicit `--python 3.13` when your machine defaults to Python 3.14.
 
 ## Available Tools
 

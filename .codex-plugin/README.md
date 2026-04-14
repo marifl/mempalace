@@ -4,13 +4,43 @@ Give your AI a persistent memory -- mine projects and conversations into a searc
 
 ## Prerequisites
 
-- Python 3.9+
+- Python 3.13 explicitly recommended
 - Codex CLI installed and configured
-- `pip install mempalace`
+- `uv` installed
+
+If your system defaults to Python 3.14, pin 3.13 explicitly with `uv tool install --python 3.13 ...`.
 
 ## Installation
 
-### Local Install
+### Preferred: global integration-manager setup
+
+1. Install MemPalace as a `uv` tool from the repository root:
+
+```bash
+uv tool install --python 3.13 --editable .
+```
+
+2. Register Codex through the integration manager:
+
+```bash
+mempalace integrate codex --write
+```
+
+3. Verify Codex sees the plugin:
+
+```bash
+codex --plugins
+```
+
+4. Initialize your palace:
+
+```bash
+codex /init
+```
+
+### Repo-Local Fallback
+
+If you want to keep the plugin directory in the repository and manage Codex integration manually, the legacy `.codex-plugin` layout still works as a fallback.
 
 1. Copy or symlink the `.codex-plugin` directory into your project root:
 
@@ -18,34 +48,17 @@ Give your AI a persistent memory -- mine projects and conversations into a searc
 cp -r .codex-plugin /path/to/your/project/.codex-plugin
 ```
 
-2. Verify the plugin is detected:
+2. Install MemPalace with `uv` from the repository root:
+
+```bash
+uv tool install --python 3.13 --editable .
+```
+
+3. Verify the plugin is detected:
 
 ```bash
 codex --plugins
 ```
-
-3. Initialize your palace:
-
-```bash
-codex /init
-```
-
-### Git Install
-
-1. Clone the MemPalace repository:
-
-```bash
-git clone https://github.com/milla-jovovich/mempalace.git
-cd mempalace
-```
-
-2. Install the Python package:
-
-```bash
-pip install -e .
-```
-
-3. The `.codex-plugin` directory is already in the repo root. Codex CLI will detect it automatically when you run Codex from inside the repository.
 
 4. Initialize your palace:
 

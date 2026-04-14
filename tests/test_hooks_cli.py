@@ -283,6 +283,24 @@ def test_parse_harness_input_valid():
     assert result["stop_hook_active"] is True
 
 
+def test_parse_harness_input_gemini():
+    result = _parse_harness_input(
+        {
+            "session_id": "../abc-123",
+            "transcript_path": "/tmp/t.json",
+            "cwd": "/repo",
+            "hook_event_name": "PreCompress",
+            "trigger": "auto",
+        },
+        "gemini",
+    )
+    assert result["session_id"] == "abc-123"
+    assert result["transcript_path"] == "/tmp/t.json"
+    assert result["cwd"] == "/repo"
+    assert result["hook_event_name"] == "PreCompress"
+    assert result["trigger"] == "auto"
+
+
 # --- hook_stop with OSError on write ---
 
 
@@ -401,6 +419,41 @@ def test_run_hook_dispatches_precompact(tmp_path):
     mock_output.assert_called_once()
     call_args = mock_output.call_args[0][0]
     assert call_args["decision"] == "block"
+
+
+def test_run_hook_precompact_gemini_dispatches(tmp_path):
+    stdin_data = json.dumps(
+        {
+            "session_id": "run-test",
+            "cwd": str(tmp_path),
+            "hook_event_name": "PreCompress",
+            "trigger": "auto",
+        }
+    )
+    with patch("sys.stdin", io.StringIO(stdin_data)):
+        with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
+            with patch("mempalace.hooks_cli._output") as mock_output:
+                run_hook("precompact", "gemini")
+    mock_output.assert_called_once()
+    call_args = mock_output.call_args[0][0]
+    assert "systemMessage" in call_args
+    assert "decision" not in call_args
+
+
+def test_run_hook_precompact_gemini_returns_system_message_not_block(tmp_path):
+    result = _capture_hook_output(
+        hook_precompact,
+        {
+            "session_id": "test",
+            "cwd": str(tmp_path),
+            "hook_event_name": "PreCompress",
+            "trigger": "manual",
+        },
+        harness="gemini",
+        state_dir=tmp_path,
+    )
+    assert result["systemMessage"] == PRECOMPACT_BLOCK_REASON
+    assert "decision" not in result
 
 
 def test_run_hook_unknown_hook():

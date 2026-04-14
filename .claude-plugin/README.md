@@ -4,28 +4,35 @@ A Claude Code plugin that gives your AI a persistent memory system. Mine project
 
 ## Prerequisites
 
-- Python 3.9+
+- `uv` installed
+- Python 3.13
+- If you are on Python 3.14, pin the tool install to `--python 3.13` for the tested Chroma path
 
 ## Installation
 
-### Claude Code Marketplace
+### Primary Path
+
+Install the package with `uv` first, then configure Claude with the integration manager:
+
+```bash
+uv tool install --python 3.13 --editable /path/to/mempalace
+mempalace integrate claude --write
+```
+
+If you are already inside the repository, use `uv tool install --python 3.13 --editable .`.
+
+## Legacy Fallback
+
+The Claude Code marketplace/plugin flow still works as a fallback for legacy setups:
 
 ```bash
 claude plugin marketplace add milla-jovovich/mempalace
 claude plugin install --scope user mempalace
 ```
 
-### Local Clone
+After installing the legacy plugin, run the init command to complete any remaining setup:
 
 ```bash
-claude plugin add /path/to/mempalace
-```
-
-## Post-Install Setup
-
-After installing the plugin, run the init command to complete setup (pip install, MCP configuration, etc.):
-
-```
 /mempalace:init
 ```
 
@@ -50,7 +57,7 @@ Set the `MEMPAL_DIR` environment variable to a directory path to automatically r
 
 ## MCP Server
 
-The plugin automatically configures a local MCP server with 19 tools for storing, searching, and managing memories. No manual MCP setup is required -- `/mempalace:init` handles everything.
+The primary path configures the MCP server through `mempalace integrate claude --write`. The legacy plugin path still exposes the local MCP server and can be repaired with `/mempalace:init` when needed.
 
 ## Full Documentation
 
