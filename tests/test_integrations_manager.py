@@ -5,8 +5,6 @@ import pytest
 from mempalace.integrations.base import IntegrationAction
 from mempalace.integrations.io import atomic_write_text
 from mempalace.integrations.manager import (
-    apply_plan,
-    build_plan,
     render_plan,
     run_integrations,
     select_adapters,
@@ -180,6 +178,14 @@ def test_empty_plan_skips_confirmation(monkeypatch):
     result = run_integrations(hosts=[], dry_run=False, write=False, palace=None, scope="auto", remove=False)
 
     assert result == 0
+
+
+def test_confirm_treats_eof_as_decline(monkeypatch):
+    monkeypatch.setattr("builtins.input", lambda _prompt: (_ for _ in ()).throw(EOFError()))
+
+    from mempalace.integrations import manager
+
+    assert manager._confirm() is False
 
 
 def test_manager_isolates_failures_per_host(monkeypatch):

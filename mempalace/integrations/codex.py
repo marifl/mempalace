@@ -18,7 +18,7 @@ except ModuleNotFoundError:  # pragma: no cover
     tomllib = None
 
 
-_MEMPALACE_BLOCK_RE = re.compile(r"(?ms)^\[mcp_servers\.mempalace\]\n.*?(?=^\[|\Z)")
+_MEMPALACE_BLOCK_RE = re.compile(r"(?ms)^\[mcp_servers\.mempalace\][^\n]*\n.*?(?=^\[|\Z)")
 
 
 class CodexAdapter:
@@ -210,6 +210,7 @@ class CodexAdapter:
             host=self.name,
             validator=self._validate_toml_file,
         )
+        self._verify_target_file_patch(action)
         summary = (
             "Removed MemPalace MCP registration"
             if action.kind == "remove"
@@ -273,3 +274,15 @@ class CodexAdapter:
         if tomllib is None:
             raise RuntimeError("TOML validation unavailable on this Python version")
         tomllib.loads(path.read_text(encoding="utf-8"))
+
+    def _verify_target_file_patch(self, action: IntegrationAction) -> None:
+        parsed_after = self._load_user_config()
+        if parsed_after["invalid"]:
+            raise RuntimeError("Codex config became invalid after write")
+        current = parsed_after["mempalace"]
+        if action.kind == "remove":
+            if current is not None:
+                raise RuntimeError("Codex config still contains mempalace after remove")
+            return
+        if not self._matches_desired(current, list(action.command_args)):
+            raise RuntimeError("Codex config did not verify mempalace after write")

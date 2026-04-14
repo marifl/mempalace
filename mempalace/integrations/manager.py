@@ -65,7 +65,10 @@ def render_plan(plan):
 
 
 def _confirm():
-    answer = input("Apply these changes? [y/N]: ").strip().lower()
+    try:
+        answer = input("Apply these changes? [y/N]: ").strip().lower()
+    except EOFError:
+        return False
     return answer in {"y", "yes"}
 
 

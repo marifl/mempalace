@@ -1,6 +1,7 @@
 import json
-from pathlib import Path
 from subprocess import CompletedProcess
+
+import pytest
 
 from mempalace.integrations.codex import CodexAdapter
 
@@ -226,3 +227,65 @@ def test_codex_fallback_writes_custom_palace_args(tmp_path, monkeypatch):
     content = user_config.read_text(encoding="utf-8")
     assert 'command = "mempalace-mcp"' in content
     assert f'args = ["--palace", "{palace}"]' in content
+
+
+def test_codex_remove_matches_section_header_with_inline_comment(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    project_root = tmp_path / "repo"
+    user_config = home_dir / ".codex" / "config.toml"
+    user_config.parent.mkdir(parents=True)
+    user_config.write_text(
+        (
+            '[mcp_servers.mempalace]  # managed by mempalace\n'
+            'command = "mempalace-mcp"\n'
+            'args = []\n'
+            '\n'
+            '[mcp_servers.other]\n'
+            'command = "other"\n'
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("mempalace.integrations.codex.shutil.which", lambda _name: None)
+
+    adapter = CodexAdapter(home_dir=home_dir, project_root=project_root)
+    action = adapter.plan(palace=None, scope="auto", remove=True)
+    adapter.apply(action)
+
+    content = user_config.read_text(encoding="utf-8")
+    assert "[mcp_servers.mempalace]" not in content
+    assert '[mcp_servers.other]\ncommand = "other"' in content
+
+
+def test_codex_fallback_verifies_remove_result(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    project_root = tmp_path / "repo"
+    user_config = home_dir / ".codex" / "config.toml"
+    user_config.parent.mkdir(parents=True)
+    user_config.write_text(
+        (
+            '[mcp_servers.mempalace]\n'
+            'command = "mempalace-mcp"\n'
+            'args = []\n'
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("mempalace.integrations.codex.shutil.which", lambda _name: None)
+
+    def fake_atomic_write_text(path, content, **kwargs):
+        path.write_text(
+            (
+                '[mcp_servers.mempalace]\n'
+                'command = "mempalace-mcp"\n'
+                'args = []\n'
+            ),
+            encoding="utf-8",
+        )
+        return None
+
+    monkeypatch.setattr("mempalace.integrations.codex.atomic_write_text", fake_atomic_write_text)
+
+    adapter = CodexAdapter(home_dir=home_dir, project_root=project_root)
+    action = adapter.plan(palace=None, scope="auto", remove=True)
+
+    with pytest.raises(RuntimeError, match="still contains mempalace after remove"):
+        adapter.apply(action)
