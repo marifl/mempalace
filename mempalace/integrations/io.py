@@ -71,9 +71,12 @@ def atomic_write_json(
     path = Path(path)
     merged = {}
     if path.exists():
-        merged = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            merged = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Invalid JSON in {path}: {exc}") from exc
         if not isinstance(merged, dict):
-            raise TypeError(f"Expected JSON object in {path}")
+            raise ValueError(f"Expected JSON object in {path}")
     merged = dict(merged)
     merged.update(dict(updates))
     payload = json.dumps(merged, indent=2) + "\n"

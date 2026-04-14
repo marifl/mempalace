@@ -92,3 +92,24 @@ def test_legacy_hook_wrappers_use_mempalace_cli():
         content = wrapper.read_text(encoding="utf-8")
         assert "mempalace hook run" in content
         assert "python3 -m mempalace" not in content
+
+
+def test_legacy_codex_hook_manifest_uses_supported_events():
+    repo_root = Path(__file__).resolve().parents[1]
+    hooks_manifest = json.loads((repo_root / ".codex-plugin" / "hooks.json").read_text(encoding="utf-8"))
+
+    assert set(hooks_manifest["hooks"]) == {"SessionStart", "Stop"}
+
+
+def test_readme_codex_hook_example_matches_supported_codex_events():
+    repo_root = Path(__file__).resolve().parents[1]
+    readme = (repo_root / "README.md").read_text(encoding="utf-8")
+    match = re.search(r"For Codex,.*?```json\n(.*?)\n```", readme, re.DOTALL)
+
+    assert match is not None
+    block = match.group(1)
+    assert '"SessionStart"' in block
+    assert '"Stop"' in block
+    assert '"PreCompact"' not in block
+    assert "--harness codex" in block
+    assert "--harness claude-code" not in block

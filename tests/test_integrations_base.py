@@ -105,3 +105,11 @@ def test_json_write_preserves_unrelated_keys_semantically(tmp_path):
         "nested": {"a": 1},
         "replace": "old",
     }
+
+
+def test_atomic_write_json_invalid_existing_json_raises_value_error(tmp_path):
+    target = tmp_path / "settings.json"
+    target.write_text("{not valid json", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Invalid JSON"):
+        atomic_write_json(target, {"added": True}, host="codex")

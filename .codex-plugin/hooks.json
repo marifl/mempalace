@@ -21,17 +21,6 @@
           }
         ]
       }
-    ],
-    "PreCompact": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CODEX_PLUGIN_ROOT}/hooks/mempal-hook.sh precompact"
-          }
-        ]
-      }
     ]
   }
 }

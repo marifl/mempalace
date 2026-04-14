@@ -78,7 +78,7 @@ codex /init
 
 ## Hooks
 
-The plugin includes auto-save hooks that run on session stop (every 15 messages) and before context compaction, automatically preserving conversation context into your palace.
+The plugin includes native Codex hooks for session start and stop. The stop hook triggers an auto-save checkpoint every 15 user messages and preserves conversation context into your palace.
 
 Set the `MEMPAL_DIR` environment variable to a directory path to automatically run `mempalace mine` on that directory during each save trigger.
 
