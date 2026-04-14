@@ -47,6 +47,12 @@ def _write_transcript(path: Path, entries: list[dict]):
             f.write(json.dumps(entry) + "\n")
 
 
+def _write_user_config(home_dir: Path, payload: dict):
+    config_dir = home_dir / ".mempalace"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "config.json").write_text(json.dumps(payload), encoding="utf-8")
+
+
 def test_count_human_messages_basic(tmp_path):
     transcript = tmp_path / "t.jsonl"
     _write_transcript(
@@ -244,10 +250,10 @@ def test_maybe_auto_ingest_no_env(tmp_path):
 
 
 def test_maybe_auto_ingest_with_env(tmp_path):
-    """With MEMPAL_DIR set to a valid directory, spawns subprocess."""
+    """With explicit opt-in and a valid directory, spawns subprocess."""
     mempal_dir = tmp_path / "project"
     mempal_dir.mkdir()
-    with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
+    with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir), "MEMPAL_AUTO_MINE": "stop"}):
         with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
             with patch("mempalace.hooks_cli.subprocess.Popen") as mock_popen:
                 _maybe_auto_ingest()
@@ -258,10 +264,202 @@ def test_maybe_auto_ingest_oserror(tmp_path):
     """OSError during subprocess spawn is silenced."""
     mempal_dir = tmp_path / "project"
     mempal_dir.mkdir()
-    with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
+    with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir), "MEMPAL_AUTO_MINE": "stop"}):
         with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
             with patch("mempalace.hooks_cli.subprocess.Popen", side_effect=OSError("fail")):
                 _maybe_auto_ingest()  # should not raise
+
+
+def test_stop_hook_does_not_auto_mine_from_mempal_dir_alone(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.setenv("MEMPAL_DIR", str(project_dir))
+    monkeypatch.chdir(project_dir)
+    transcript = tmp_path / "t.jsonl"
+    _write_transcript(
+        transcript,
+        [{"message": {"role": "user", "content": f"msg {i}"}} for i in range(SAVE_INTERVAL)],
+    )
+
+    with patch("mempalace.hooks_cli.subprocess.Popen") as mock_popen:
+        result = _capture_hook_output(
+            hook_stop,
+            {"session_id": "test", "stop_hook_active": False, "transcript_path": str(transcript)},
+            state_dir=tmp_path,
+        )
+
+    assert result["decision"] == "block"
+    mock_popen.assert_not_called()
+
+
+def test_stop_hook_auto_mines_from_user_policy(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.chdir(project_dir)
+    _write_user_config(
+        home_dir,
+        {"auto_mine": {"enabled": True, "dir": str(project_dir), "triggers": ["stop"]}},
+    )
+    transcript = tmp_path / "t.jsonl"
+    _write_transcript(
+        transcript,
+        [{"message": {"role": "user", "content": f"msg {i}"}} for i in range(SAVE_INTERVAL)],
+    )
+
+    with patch("mempalace.hooks_cli.subprocess.Popen") as mock_popen:
+        result = _capture_hook_output(
+            hook_stop,
+            {"session_id": "test", "stop_hook_active": False, "transcript_path": str(transcript)},
+            state_dir=tmp_path,
+        )
+
+    assert result["decision"] == "block"
+    mock_popen.assert_called_once()
+    assert mock_popen.call_args.args[0][-1] == str(project_dir)
+
+
+def test_project_policy_overrides_user_policy_for_triggers(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.chdir(project_dir)
+    _write_user_config(
+        home_dir,
+        {"auto_mine": {"enabled": True, "dir": str(tmp_path / "global-dir"), "triggers": ["stop"]}},
+    )
+    (project_dir / "mempalace.yaml").write_text(
+        "wing: project\nrooms: []\nauto_mine:\n  enabled: true\n  triggers:\n    - precompact\n",
+        encoding="utf-8",
+    )
+    transcript = tmp_path / "t.jsonl"
+    _write_transcript(
+        transcript,
+        [{"message": {"role": "user", "content": f"msg {i}"}} for i in range(SAVE_INTERVAL)],
+    )
+
+    with patch("mempalace.hooks_cli.subprocess.Popen") as mock_popen:
+        result = _capture_hook_output(
+            hook_stop,
+            {"session_id": "test", "stop_hook_active": False, "transcript_path": str(transcript)},
+            state_dir=tmp_path,
+        )
+
+    assert result["decision"] == "block"
+    mock_popen.assert_not_called()
+
+    with patch("mempalace.hooks_cli.subprocess.run") as mock_run:
+        result = _capture_hook_output(
+            hook_precompact,
+            {"session_id": "test"},
+            state_dir=tmp_path,
+        )
+
+    assert result["decision"] == "block"
+    mock_run.assert_called_once()
+    assert mock_run.call_args.args[0][-1] == str(project_dir)
+
+
+def test_env_policy_overrides_project_and_user(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    project_dir = tmp_path / "project"
+    env_dir = tmp_path / "env-dir"
+    project_dir.mkdir()
+    env_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.setenv("MEMPAL_DIR", str(env_dir))
+    monkeypatch.setenv("MEMPAL_AUTO_MINE", "stop")
+    monkeypatch.chdir(project_dir)
+    _write_user_config(
+        home_dir,
+        {"auto_mine": {"enabled": True, "dir": str(tmp_path / "global-dir"), "triggers": ["precompact"]}},
+    )
+    (project_dir / "mempalace.yaml").write_text(
+        "wing: project\nrooms: []\nauto_mine:\n  enabled: true\n  triggers:\n    - precompact\n  dir: project-dir\n",
+        encoding="utf-8",
+    )
+    transcript = tmp_path / "t.jsonl"
+    _write_transcript(
+        transcript,
+        [{"message": {"role": "user", "content": f"msg {i}"}} for i in range(SAVE_INTERVAL)],
+    )
+
+    with patch("mempalace.hooks_cli.subprocess.Popen") as mock_popen:
+        result = _capture_hook_output(
+            hook_stop,
+            {"session_id": "test", "stop_hook_active": False, "transcript_path": str(transcript)},
+            state_dir=tmp_path,
+        )
+
+    assert result["decision"] == "block"
+    mock_popen.assert_called_once()
+    assert mock_popen.call_args.args[0][-1] == str(env_dir)
+
+
+def test_project_policy_defaults_dir_to_project_root(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.chdir(project_dir)
+    (project_dir / "mempalace.yaml").write_text(
+        "wing: project\nrooms: []\nauto_mine:\n  enabled: true\n  triggers:\n    - stop\n",
+        encoding="utf-8",
+    )
+    transcript = tmp_path / "t.jsonl"
+    _write_transcript(
+        transcript,
+        [{"message": {"role": "user", "content": f"msg {i}"}} for i in range(SAVE_INTERVAL)],
+    )
+
+    with patch("mempalace.hooks_cli.subprocess.Popen") as mock_popen:
+        result = _capture_hook_output(
+            hook_stop,
+            {"session_id": "test", "stop_hook_active": False, "transcript_path": str(transcript)},
+            state_dir=tmp_path,
+        )
+
+    assert result["decision"] == "block"
+    mock_popen.assert_called_once()
+    assert mock_popen.call_args.args[0][-1] == str(project_dir)
+
+
+def test_invalid_project_policy_does_not_override_user_policy(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    project_dir = tmp_path / "project"
+    global_dir = tmp_path / "global-dir"
+    project_dir.mkdir()
+    global_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.chdir(project_dir)
+    _write_user_config(
+        home_dir,
+        {"auto_mine": {"enabled": True, "dir": str(global_dir), "triggers": ["stop"]}},
+    )
+    (project_dir / "mempalace.yaml").write_text(
+        "wing: project\nrooms: []\nauto_mine:\n  triggers: definitely-not-a-list\n",
+        encoding="utf-8",
+    )
+    transcript = tmp_path / "t.jsonl"
+    _write_transcript(
+        transcript,
+        [{"message": {"role": "user", "content": f"msg {i}"}} for i in range(SAVE_INTERVAL)],
+    )
+
+    with patch("mempalace.hooks_cli.subprocess.Popen") as mock_popen:
+        result = _capture_hook_output(
+            hook_stop,
+            {"session_id": "test", "stop_hook_active": False, "transcript_path": str(transcript)},
+            state_dir=tmp_path,
+        )
+
+    assert result["decision"] == "block"
+    mock_popen.assert_called_once()
+    assert mock_popen.call_args.args[0][-1] == str(global_dir)
 
 
 # --- _parse_harness_input ---
@@ -350,10 +548,10 @@ def test_stop_hook_oserror_on_write(tmp_path):
 
 
 def test_precompact_with_mempal_dir(tmp_path):
-    """Precompact runs subprocess.run when MEMPAL_DIR is set."""
+    """Precompact runs subprocess.run when explicit opt-in is set."""
     mempal_dir = tmp_path / "project"
     mempal_dir.mkdir()
-    with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
+    with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir), "MEMPAL_AUTO_MINE": "precompact"}):
         with patch("mempalace.hooks_cli.subprocess.run") as mock_run:
             result = _capture_hook_output(
                 hook_precompact,
@@ -368,7 +566,7 @@ def test_precompact_with_mempal_dir_oserror(tmp_path):
     """Precompact handles OSError from subprocess gracefully."""
     mempal_dir = tmp_path / "project"
     mempal_dir.mkdir()
-    with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
+    with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir), "MEMPAL_AUTO_MINE": "precompact"}):
         with patch("mempalace.hooks_cli.subprocess.run", side_effect=OSError("fail")):
             result = _capture_hook_output(
                 hook_precompact,

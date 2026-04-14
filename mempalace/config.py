@@ -173,6 +173,12 @@ class MempalaceConfig:
         """Mapping of hall names to keyword lists."""
         return self._file_config.get("hall_keywords", DEFAULT_HALL_KEYWORDS)
 
+    @property
+    def auto_mine(self):
+        """Optional auto-mine policy object from config.json."""
+        value = self._file_config.get("auto_mine", {})
+        return value if isinstance(value, dict) else {}
+
     def init(self):
         """Create config directory and write default config.json if it doesn't exist."""
         self._config_dir.mkdir(parents=True, exist_ok=True)

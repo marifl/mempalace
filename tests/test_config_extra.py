@@ -77,3 +77,18 @@ def test_collection_name_from_config(tmp_path):
     )
     cfg = MempalaceConfig(config_dir=str(tmp_path))
     assert cfg.collection_name == "custom_col"
+
+
+def test_auto_mine_from_config(tmp_path):
+    (tmp_path / "config.json").write_text(
+        json.dumps({"auto_mine": {"enabled": True, "dir": "/repo", "triggers": ["stop"]}}),
+        encoding="utf-8",
+    )
+    cfg = MempalaceConfig(config_dir=str(tmp_path))
+    assert cfg.auto_mine == {"enabled": True, "dir": "/repo", "triggers": ["stop"]}
+
+
+def test_auto_mine_bad_shape_returns_empty(tmp_path):
+    (tmp_path / "config.json").write_text(json.dumps({"auto_mine": ["stop"]}), encoding="utf-8")
+    cfg = MempalaceConfig(config_dir=str(tmp_path))
+    assert cfg.auto_mine == {}

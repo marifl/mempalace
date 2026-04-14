@@ -75,7 +75,7 @@ If your default Python is 3.14, keep the explicit `--python 3.13` flag for uv to
 ## Auto-Save Hooks
 
 - Claude Code hooks -- `SessionStart`, `Stop`, and `PreCompact`
-- Codex hooks -- `SessionStart`, `Stop`, and `PreCompact`
+- Codex hooks -- `SessionStart` and `Stop`
 - Gemini hook -- `PreCompress`
 
 - Stop hook -- Automatically saves memories every 15 messages. Counts human
@@ -91,6 +91,12 @@ If your default Python is 3.14, keep the explicit `--python 3.13` flag for uv to
 - Gemini PreCompress hook -- Advisory-only save warning before Gemini context
   compression. Emits a `systemMessage` and does not try to block compaction,
   because Gemini ignores flow-control for `PreCompress`.
+
+- Auto-mine policy -- Disabled by default. Enable explicitly via
+  `~/.mempalace/config.json` (`auto_mine`), project-local `mempalace.yaml`
+  (`auto_mine`), or env overrides `MEMPAL_AUTO_MINE=stop|precompact|both|off`
+  with optional `MEMPAL_DIR=/absolute/path`. `MEMPAL_DIR` alone does not enable
+  auto-mine.
 
 Hooks read JSON from stdin and output JSON to stdout. They can be invoked via:
 
