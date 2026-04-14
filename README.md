@@ -595,7 +595,44 @@ Behavior:
 - **PreCompact / PreCompress**: emergency save before context compression where the host exposes a compaction hook
 - **SessionStart**: initialize hook state for the session
 
-**Optional auto-ingest:** Set the `MEMPAL_DIR` environment variable to a directory path and the hooks will automatically run `mempalace mine` on that directory during each save trigger (background on stop, synchronous on precompact).
+**Optional auto-mine policy:** auto-mining is disabled by default and only runs with explicit policy.
+
+Global policy in `~/.mempalace/config.json`:
+
+```json
+{
+  "auto_mine": {
+    "enabled": true,
+    "dir": "/absolute/path/to/project",
+    "triggers": ["stop", "precompact"]
+  }
+}
+```
+
+Project-local policy in `mempalace.yaml`:
+
+```yaml
+wing: project
+rooms: []
+auto_mine:
+  enabled: true
+  triggers:
+    - stop
+```
+
+Resolution order is:
+
+- environment override
+- project policy
+- user policy
+- disabled
+
+Project policy supplements the user policy, but project values win on conflicts. If a project policy enables auto-mine and does not set `dir`, MemPalace mines the project root. Environment overrides are temporary:
+
+- `MEMPAL_AUTO_MINE=stop|precompact|both|off`
+- `MEMPAL_DIR=/absolute/path`
+
+`MEMPAL_DIR` alone does not enable auto-mine. When enabled, stop runs `mempalace mine` in the background and precompact runs it synchronously before compaction.
 
 ---
 

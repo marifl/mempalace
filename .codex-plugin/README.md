@@ -80,7 +80,13 @@ codex /init
 
 The plugin includes native Codex hooks for session start and stop. The stop hook triggers an auto-save checkpoint every 15 user messages and preserves conversation context into your palace.
 
-Set the `MEMPAL_DIR` environment variable to a directory path to automatically run `mempalace mine` on that directory during each save trigger.
+Auto-mine is disabled by default. Enable it explicitly with either:
+
+- `~/.mempalace/config.json` -> `auto_mine`
+- project-local `mempalace.yaml` -> `auto_mine`
+- temporary env overrides: `MEMPAL_AUTO_MINE=stop|precompact|both|off` and optional `MEMPAL_DIR=/absolute/path`
+
+`MEMPAL_DIR` alone does not enable auto-mine.
 
 ## Support
 

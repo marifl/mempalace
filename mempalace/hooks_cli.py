@@ -13,9 +13,22 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Optional, Set
+
+import yaml
+
+from mempalace.config import MempalaceConfig
 
 SAVE_INTERVAL = 15
 STATE_DIR = Path.home() / ".mempalace" / "hook_state"
+AUTO_MINE_DEFAULT_TRIGGERS = {"stop", "precompact"}
+AUTO_MINE_ALLOWED_TRIGGERS = set(AUTO_MINE_DEFAULT_TRIGGERS)
+AUTO_MINE_MODE_MAP = {
+    "off": set(),
+    "stop": {"stop"},
+    "precompact": {"precompact"},
+    "both": set(AUTO_MINE_DEFAULT_TRIGGERS),
+}
 
 STOP_BLOCK_REASON = (
     "AUTO-SAVE checkpoint. Save key topics, decisions, quotes, and code "
@@ -87,20 +100,172 @@ def _output(data: dict):
     print(json.dumps(data, indent=2, ensure_ascii=False))
 
 
-def _maybe_auto_ingest():
-    """If MEMPAL_DIR is set and exists, run mempalace mine in background."""
-    mempal_dir = os.environ.get("MEMPAL_DIR", "")
-    if mempal_dir and os.path.isdir(mempal_dir):
+def _normalize_trigger_values(raw: object) -> Optional[Set[str]]:
+    if isinstance(raw, str):
+        values = [part.strip().lower() for part in raw.split(",") if part.strip()]
+    elif isinstance(raw, (list, tuple, set)):
+        values = []
+        for item in raw:
+            if not isinstance(item, str):
+                return None
+            token = item.strip().lower()
+            if token:
+                values.append(token)
+    else:
+        return None
+    normalized = set(values)
+    if not normalized.issubset(AUTO_MINE_ALLOWED_TRIGGERS):
+        return None
+    return normalized
+
+
+def _normalize_auto_mine_policy(raw: object, *, source: str) -> dict[str, object]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        _log(f"AUTO-MINE: ignoring {source} policy with unsupported type")
+        return {}
+
+    normalized: dict[str, object] = {}
+
+    if "enabled" in raw:
+        enabled = raw.get("enabled")
+        if isinstance(enabled, bool):
+            normalized["enabled"] = enabled
+        else:
+            _log(f"AUTO-MINE: ignoring {source}.enabled with unsupported type")
+
+    if "dir" in raw:
+        directory = raw.get("dir")
+        if isinstance(directory, str) and directory.strip():
+            normalized["dir"] = str(Path(directory).expanduser())
+        else:
+            _log(f"AUTO-MINE: ignoring {source}.dir with unsupported value")
+
+    if "triggers" in raw:
+        triggers = _normalize_trigger_values(raw.get("triggers"))
+        if triggers is None:
+            _log(f"AUTO-MINE: ignoring {source}.triggers with unsupported value")
+        else:
+            normalized["triggers"] = triggers
+
+    return normalized
+
+
+def _load_project_auto_mine_policy(project_root: Path) -> tuple[dict[str, object], bool]:
+    for name in ("mempalace.yaml", "mempal.yaml"):
+        path = project_root / name
+        if not path.is_file():
+            continue
         try:
-            log_path = STATE_DIR / "hook.log"
-            with open(log_path, "a") as log_f:
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except (yaml.YAMLError, OSError) as exc:
+            _log(f"AUTO-MINE: ignoring project policy in {path}: {exc}")
+            return {}, False
+        if not isinstance(data, dict):
+            _log(f"AUTO-MINE: ignoring project policy in {path} with unsupported root type")
+            return {}, False
+        auto_mine = data.get("auto_mine")
+        normalized = _normalize_auto_mine_policy(auto_mine, source=f"{name}:auto_mine")
+        return normalized, bool(normalized)
+    return {}, False
+
+
+def _load_env_auto_mine_policy() -> dict[str, object]:
+    policy: dict[str, object] = {}
+    directory = os.environ.get("MEMPAL_DIR", "").strip()
+    if directory:
+        policy["dir"] = str(Path(directory).expanduser())
+
+    mode = os.environ.get("MEMPAL_AUTO_MINE", "").strip().lower()
+    if not mode:
+        return policy
+
+    if mode in AUTO_MINE_MODE_MAP:
+        triggers = AUTO_MINE_MODE_MAP[mode]
+    else:
+        triggers = _normalize_trigger_values(mode)
+        if triggers is None:
+            _log(f"AUTO-MINE: ignoring invalid MEMPAL_AUTO_MINE value: {mode}")
+            return policy
+
+    policy["enabled"] = bool(triggers)
+    policy["triggers"] = set(triggers)
+    return policy
+
+
+def _resolve_project_root(parsed: dict) -> Path:
+    cwd = parsed.get("cwd", "")
+    if isinstance(cwd, str) and cwd.strip():
+        return Path(cwd).expanduser().resolve()
+    return Path.cwd().resolve()
+
+
+def _resolve_auto_mine_policy(parsed: dict) -> dict[str, object]:
+    merged: dict[str, object] = {"enabled": None, "dir": None, "triggers": None}
+    user_policy = _normalize_auto_mine_policy(MempalaceConfig().auto_mine, source="user auto_mine")
+    project_root = _resolve_project_root(parsed)
+    project_policy, project_present = _load_project_auto_mine_policy(project_root)
+    env_policy = _load_env_auto_mine_policy()
+
+    for layer in (user_policy, project_policy, env_policy):
+        for key, value in layer.items():
+            merged[key] = value
+
+    triggers = merged["triggers"]
+    enabled = merged["enabled"]
+    if enabled is None:
+        enabled = bool(triggers)
+    if enabled and triggers is None:
+        triggers = set(AUTO_MINE_DEFAULT_TRIGGERS)
+    if not enabled:
+        triggers = set()
+
+    directory = merged["dir"]
+    if enabled and project_present and "dir" not in env_policy:
+        directory = project_policy.get("dir", str(project_root))
+
+    return {
+        "enabled": bool(enabled),
+        "dir": directory,
+        "triggers": set(triggers or set()),
+    }
+
+
+def _maybe_auto_ingest(trigger: str = "stop", parsed: Optional[dict] = None):
+    """Run auto-mine for the configured trigger when an explicit policy enables it."""
+    policy = _resolve_auto_mine_policy(parsed or {})
+    if not policy["enabled"]:
+        return
+    if trigger not in policy["triggers"]:
+        return
+
+    mempal_dir = policy["dir"]
+    if not isinstance(mempal_dir, str) or not mempal_dir.strip():
+        _log(f"AUTO-MINE: trigger {trigger} enabled but no directory configured")
+        return
+    if not os.path.isdir(mempal_dir):
+        _log(f"AUTO-MINE: trigger {trigger} directory does not exist: {mempal_dir}")
+        return
+
+    try:
+        log_path = STATE_DIR / "hook.log"
+        with open(log_path, "a") as log_f:
+            if trigger == "stop":
                 subprocess.Popen(
                     [sys.executable, "-m", "mempalace", "mine", mempal_dir],
                     stdout=log_f,
                     stderr=log_f,
                 )
-        except OSError:
-            pass
+            else:
+                subprocess.run(
+                    [sys.executable, "-m", "mempalace", "mine", mempal_dir],
+                    stdout=log_f,
+                    stderr=log_f,
+                    timeout=60,
+                )
+    except OSError:
+        pass
 
 
 SUPPORTED_HARNESSES = {"claude-code", "codex", "gemini"}
@@ -165,7 +330,7 @@ def hook_stop(data: dict, harness: str):
         _log(f"TRIGGERING SAVE at exchange {exchange_count}")
 
         # Optional: auto-ingest if MEMPAL_DIR is set
-        _maybe_auto_ingest()
+        _maybe_auto_ingest("stop", parsed)
 
         _output({"decision": "block", "reason": STOP_BLOCK_REASON})
     else:
@@ -194,19 +359,7 @@ def hook_precompact(data: dict, harness: str):
     _log(f"PRE-COMPACT triggered for session {session_id}")
 
     # Optional: auto-ingest synchronously before compaction (so memories land first)
-    mempal_dir = os.environ.get("MEMPAL_DIR", "")
-    if mempal_dir and os.path.isdir(mempal_dir):
-        try:
-            log_path = STATE_DIR / "hook.log"
-            with open(log_path, "a") as log_f:
-                subprocess.run(
-                    [sys.executable, "-m", "mempalace", "mine", mempal_dir],
-                    stdout=log_f,
-                    stderr=log_f,
-                    timeout=60,
-                )
-        except OSError:
-            pass
+    _maybe_auto_ingest("precompact", parsed)
 
     if harness == "gemini":
         _output({"systemMessage": PRECOMPACT_BLOCK_REASON})
